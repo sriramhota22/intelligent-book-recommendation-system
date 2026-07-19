@@ -10,7 +10,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import nltk
 
-nltk.download("stopwords")
+try:
+    stopwords.words("english")
+except LookupError:
+    nltk.download("stopwords")
 
 
 # Page title
@@ -73,16 +76,17 @@ def load_data():
     return books, similarity
 
 
-books, similarity = load_data()
+with st.spinner("Loading recommendation engine..."):
+    books, similarity = load_data()
+
+st.success("Recommendation engine loaded successfully!")
 
 
 def recommend_books(book_name, num_recommendations=5):
 
     book_index = books[books["title"] == book_name].index[0]
 
-    similarity_scores = list(
-        enumerate(similarity[book_index])
-    )
+    similarity_scores = list(enumerate(similarity[book_index]))
 
     similarity_scores = sorted(
         similarity_scores,
@@ -90,25 +94,27 @@ def recommend_books(book_name, num_recommendations=5):
         reverse=True
     )
 
-    recommended_books = similarity_scores[
-        1:num_recommendations + 1
-    ]
-
     recommendations = []
+    seen_titles = set()
 
-    for book in recommended_books:
+    for index, score in similarity_scores[1:]:
 
-        recommendations.append(
-            books.iloc[book[0]][
-                ["title", "author", "avg_rating"]
-            ]
-        )
+        title = books.iloc[index]["title"]
 
-    return (
-        pd.DataFrame(recommendations)
-        .reset_index(drop=True)
-    )
+        if title not in seen_titles:
 
+            recommendations.append(
+                books.iloc[index][
+                    ["title", "author", "avg_rating"]
+                ]
+            )
+
+            seen_titles.add(title)
+
+        if len(recommendations) == num_recommendations:
+            break
+
+    return pd.DataFrame(recommendations).reset_index(drop=True)
 
 selected_book = st.selectbox(
     "Select a Book",

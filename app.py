@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import nltk
 
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
@@ -8,15 +9,13 @@ from nltk.stem import PorterStemmer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-import nltk
-
+# Download stopwords only if needed
 try:
     stopwords.words("english")
 except LookupError:
     nltk.download("stopwords")
 
-
-# Page title
+# Page configuration
 st.set_page_config(
     page_title="Book Recommendation System",
     page_icon="📚",
@@ -27,9 +26,9 @@ st.title("📚 Intelligent Book Recommendation System")
 st.write("Book Recommendation using Text Mining and Machine Learning")
 
 
-# Loading dataset
 @st.cache_data
 def load_data():
+
     books = pd.read_csv("Goodreadss Books.csv", engine="python")
 
     books = books[
@@ -51,7 +50,7 @@ def load_data():
 
     def preprocess_text(text):
 
-        text = text.lower()
+        text = str(text).lower()
 
         text = re.sub(r"[^\w\s]", "", text)
 
@@ -71,22 +70,27 @@ def load_data():
 
     tfidf_matrix = tfidf.fit_transform(books["content"])
 
-    similarity = cosine_similarity(tfidf_matrix)
-
-    return books, similarity
+    return books, tfidf_matrix
 
 
 with st.spinner("Loading recommendation engine..."):
-    books, similarity = load_data()
+    books, tfidf_matrix = load_data()
 
-st.success("Recommendation engine loaded successfully!")
+st.success("Recommendation engine loaded successfully.")
 
 
 def recommend_books(book_name, num_recommendations=5):
 
     book_index = books[books["title"] == book_name].index[0]
 
-    similarity_scores = list(enumerate(similarity[book_index]))
+    book_vector = tfidf_matrix[book_index]
+
+    similarity_scores = cosine_similarity(
+        book_vector,
+        tfidf_matrix
+    ).flatten()
+
+    similarity_scores = list(enumerate(similarity_scores))
 
     similarity_scores = sorted(
         similarity_scores,
@@ -103,32 +107,32 @@ def recommend_books(book_name, num_recommendations=5):
 
         if title not in seen_titles:
 
-            recommendations.append(
-                books.iloc[index][
-                    ["title", "author", "avg_rating"]
-                ]
-            )
+            recommendations.append({
+                "Title": books.iloc[index]["title"],
+                "Author": books.iloc[index]["author"],
+                "Average Rating": books.iloc[index]["avg_rating"]
+            })
 
             seen_titles.add(title)
 
         if len(recommendations) == num_recommendations:
             break
 
-    return pd.DataFrame(recommendations).reset_index(drop=True)
+    return pd.DataFrame(recommendations)
+
 
 selected_book = st.selectbox(
     "Select a Book",
     sorted(books["title"].unique())
 )
 
-
 if st.button("Recommend Books"):
 
-    result = recommend_books(selected_book)
+    recommendations = recommend_books(selected_book)
 
     st.subheader("Recommended Books")
 
     st.dataframe(
-        result,
+        recommendations,
         use_container_width=True
     )
